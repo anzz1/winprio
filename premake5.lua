@@ -1,0 +1,75 @@
+workspace "winprio"
+  configurations { "Release" }
+  platforms { "Win32", "x64" }
+  location "build"
+  objdir ("build/obj")
+  buildlog ("build/log/%{prj.name}.log")
+
+  characterset ("MBCS")
+  staticruntime "Off"
+  exceptionhandling "Off"
+  floatingpoint "Fast"
+  floatingpointexceptions "Off"
+  intrinsics "On"
+  rtti "Off"
+  omitframepointer "On"
+  flags { "NoBufferSecurityCheck", "NoIncrementalLink", "NoManifest", "NoPCH", "NoRuntimeChecks", "OmitDefaultLibrary" }
+  buildoptions { "/kernel", "/Gs1000000" }
+  linkoptions { "/kernel", "/SAFESEH:NO", "/GUARD:NO", "/EMITPOGOPHASEINFO", "/RELEASE", "/DEBUG:NONE", "/DYNAMICBASE:NO", "/FIXED", "/NOIMPLIB", "/NOEXP" }
+
+  filter "configurations:Release"
+    runtime "Release"
+    defines "NDEBUG"
+    optimize "Speed"
+    symbols "Off"
+
+  filter "platforms:Win32"
+    architecture "x86"
+
+  filter "platforms:x64"
+    architecture "x64"
+
+project "ntdll_lib_stub"
+  kind "SharedLib"
+  language "C"
+  targetname "ntdll"
+  targetdir "build/obj"
+  files { "src/ntdll_lib_stub.c", "src/ntdll.def" }
+  entrypoint "DllMain"
+  filter "platforms:Win32"
+    targetextension ".x86"
+  filter "platforms:x64"
+    targetextension ".x64"
+
+project "winprio"
+  kind "ConsoleApp"
+  language "C"
+  targetname "prio"
+  targetextension ".exe"
+  files { "src/prio.c", "src/version.h" }
+  dependson { "ntdll_lib_stub" }
+  entrypoint "main"
+  filter "platforms:Win32"
+    targetdir "bin/Win32"
+  filter "platforms:x64"
+    targetdir "bin/x64"
+
+if _ACTION and _ACTION >= "vs2010" then
+  require "vstudio"
+  premake.override(premake.vstudio.vc2010.elements, "clCompile", function(base, prj)
+    local calls = base(prj)
+    table.insert(calls, function() premake.vstudio.vc2010.element("SDLCheck", nil, "false") end)
+    table.insert(calls, function() premake.vstudio.vc2010.element("ControlFlowGuard", nil, "false") end)
+    return calls
+  end)
+  premake.override(premake.vstudio.vc2010.elements, "link", function(base, prj)
+    local calls = base(prj)
+    table.insert(calls, function() premake.vstudio.vc2010.element("RandomizedBaseAddress", nil, "false") end)
+    table.insert(calls, function() premake.vstudio.vc2010.element("FixedBaseAddress", nil, "true") end)
+    table.insert(calls, function() premake.vstudio.vc2010.element("SetChecksum", nil, "true") end)
+    table.insert(calls, function() premake.vstudio.vc2010.element("LinkErrorReporting", nil, "NoErrorReport") end)
+    table.insert(calls, function() premake.vstudio.vc2010.element("CETCompat", nil, "false") end)
+    table.insert(calls, function() premake.vstudio.vc2010.element("ImageHasSafeExceptionHandlers", nil, "false") end)
+    return calls
+  end)
+end
