@@ -15,7 +15,6 @@
 #include "version.h"
 
 #pragma comment (lib, "ntdll.lib")
-#pragma intrinsic (strlen,wcslen)
 
 #ifndef VERSION_STR
 #error VERSION_STR undefined
@@ -28,25 +27,6 @@ __declspec(dllimport) long __stdcall NtQueryInformationProcess(
   ULONG ProcessInformationLength,
   PULONG ReturnLength
 );
-
-static void print(const char* cbuf) {
-  DWORD u = 0;
-  WriteFile(GetStdHandle(STD_OUTPUT_HANDLE), cbuf, (DWORD)strlen(cbuf), &u, 0);
-}
-
-static void perr(const char* cbuf) {
-  DWORD u = 0;
-  WriteFile(GetStdHandle(STD_ERROR_HANDLE), cbuf, (DWORD)strlen(cbuf), &u, 0);
-}
-
-static void fmt_error(const char *fmt, DWORD_PTR arg1, DWORD_PTR arg2) {
-  char* fmt_str = 0;
-  DWORD_PTR pArgs[] = { (DWORD_PTR)arg1, (DWORD_PTR)arg2 };
-  if (FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_STRING | FORMAT_MESSAGE_ARGUMENT_ARRAY, fmt, 0, 0, (LPSTR)&fmt_str, 0, (va_list*)pArgs)) {
-    perr(fmt_str);
-    LocalFree(fmt_str);
-  }
-}
 
 __forceinline static int __wcsicmp(const unsigned short* ws1, const unsigned short* ws2) {
   unsigned short wc1, wc2;
@@ -66,6 +46,37 @@ __forceinline static unsigned short* __wcsrchr(const unsigned short* ws, unsigne
     ws++;
   }
   return p;
+}
+
+__forceinline static size_t __strlen(const char* s) {
+  size_t i = 0;
+  while (s[i]) i++;
+  return i;
+}
+
+__forceinline static size_t __wcslen(const unsigned short* ws) {
+  size_t i = 0;
+  while (ws[i]) i++;
+  return i;
+}
+
+static void print(const char* cbuf) {
+  DWORD u = 0;
+  WriteFile(GetStdHandle(STD_OUTPUT_HANDLE), cbuf, (DWORD)__strlen(cbuf), &u, 0);
+}
+
+static void perr(const char* cbuf) {
+  DWORD u = 0;
+  WriteFile(GetStdHandle(STD_ERROR_HANDLE), cbuf, (DWORD)__strlen(cbuf), &u, 0);
+}
+
+static void fmt_error(const char *fmt, DWORD_PTR arg1, DWORD_PTR arg2) {
+  char* fmt_str = 0;
+  DWORD_PTR pArgs[] = { (DWORD_PTR)arg1, (DWORD_PTR)arg2 };
+  if (FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_STRING | FORMAT_MESSAGE_ARGUMENT_ARRAY, fmt, 0, 0, (LPSTR)&fmt_str, 0, (va_list*)pArgs)) {
+    perr(fmt_str);
+    LocalFree(fmt_str);
+  }
 }
 
 static BOOL PIDIsProcess(DWORD pid) {
@@ -237,7 +248,7 @@ int main(void) {
                 (*(s+8) == L'\0' || *(s+8) == L' ' || *(s+8) == L'\t' || *(s+8) == L'/' || *(s+8) == L'-' || *(s+8) == L'\r' || *(s+8) == L'\n'))) {
       prio = REALTIME_PRIORITY_CLASS;
     } else {
-      fmt_error("prio: unknown command line option: '%1!.*ws!'\r\n", wcslen(s), (DWORD_PTR)s);
+      fmt_error("prio: unknown command line option: '%1!.*ws!'\r\n", (DWORD_PTR)__wcslen(s), (DWORD_PTR)s);
       ExitProcess(2);
     }
     while (*s && *s != L' ' && *s != L'\t') ++s;
@@ -258,7 +269,7 @@ int main(void) {
       } else {
          pid = GetPIDForProcessW(s);
          if (!pid) {
-           fmt_error("prio: could not find process with name: '%1!.*ws!'\r\n", wcslen(s), (DWORD_PTR)s);
+           fmt_error("prio: could not find process with name: '%1!.*ws!'\r\n", (DWORD_PTR)__wcslen(s), (DWORD_PTR)s);
            ExitProcess(-3);
          }
       }
@@ -271,20 +282,20 @@ int main(void) {
       }
     }
 
-		pproc = OpenProcess(PROCESS_SET_INFORMATION, FALSE, pid);
-		if (!pproc) {
+    pproc = OpenProcess(PROCESS_SET_INFORMATION, FALSE, pid);
+    if (!pproc) {
       err = GetLastError();
       fmt_error("prio: (!) kernel32:OpenProcess() failed; error code = 0x%1!08X!\r\n", (DWORD_PTR)err, (DWORD_PTR)"");
       ExitProcess(-5);
     }
-		if (!SetPriorityClass(pproc, prio)) {
+    if (!SetPriorityClass(pproc, prio)) {
       err = GetLastError();
       CloseHandle(pproc);
       fmt_error("prio: (!) kernel32:SetPriorityClass() failed; error code = 0x%1!08X!\r\n", (DWORD_PTR)err, (DWORD_PTR)"");
       ExitProcess(-6);
     }
-		CloseHandle(pproc);
-		ExitProcess(0);
+    CloseHandle(pproc);
+    ExitProcess(0);
   }
   perr("prio: (!) kernel32:GetCommandLineW() failed\r\n");
   ExitProcess(-1);
