@@ -1,6 +1,6 @@
 #!/bin/sh
 
-CURRENT_BUILD=$(git ls-remote --tags origin 'v2.*' | tail -1 | cut -f3 -d.)
+CURRENT_BUILD=$(git ls-remote --tags origin 'v1.*' | tail -1 | cut -f3 -d.)
 if [ -z "$CURRENT_BUILD" ]; then
 	RELEASE_BUILD=0
 else
