@@ -61,6 +61,16 @@ __forceinline static size_t __wcslen(const unsigned short* ws) {
   return i;
 }
 
+__forceinline static unsigned short* __wcsncpy(unsigned short* dst, const unsigned short* src, size_t len) {
+  size_t i;
+  for (i = 0; i < len; i++) {
+    if (src[i] == 0) break;
+    dst[i] = src[i];
+  }
+  dst[i] = 0;
+  return dst;
+}
+
 static void print(const char* cbuf) {
   DWORD u = 0;
   WriteFile(GetStdHandle(STD_OUTPUT_HANDLE), cbuf, (DWORD)__strlen(cbuf), &u, 0);
@@ -80,8 +90,18 @@ static void fmt_error(const char *fmt, DWORD_PTR arg1, DWORD_PTR arg2) {
   }
 }
 
-static BOOL PIDIsProcess(DWORD pid) {
+static void fmt_print(const char *fmt, DWORD_PTR arg1, DWORD_PTR arg2) {
+  char* fmt_str = 0;
+  DWORD_PTR pArgs[] = { (DWORD_PTR)arg1, (DWORD_PTR)arg2 };
+  if (FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_STRING | FORMAT_MESSAGE_ARGUMENT_ARRAY, fmt, 0, 0, (LPSTR)&fmt_str, 0, (va_list*)pArgs)) {
+    print(fmt_str);
+    LocalFree(fmt_str);
+  }
+}
+
+static BOOL GetNameForProcessW(DWORD pid, wchar_t* procname) {
   PROCESSENTRY32W lppew;
+  wchar_t* pname;
   HANDLE hSnapshot;
   BOOL found = FALSE;
   hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
@@ -92,6 +112,9 @@ static BOOL PIDIsProcess(DWORD pid) {
       do {
         if(pid == lppew.th32ProcessID) {
           found = TRUE;
+          pname = __wcsrchr(lppew.szExeFile, L'\\');
+          __wcsncpy(procname, (pname ? pname+1 : lppew.szExeFile), 63);
+          procname[63] = 0;
           break;
         }
       } while (Process32NextW(hSnapshot,&lppew));
@@ -135,7 +158,7 @@ DWORD GetParentProcessId() {
 void print_help(void) {
   print("prio " VERSION_STR " - Set priority of a process\r\n"
         "Usage: prio <PRIORITY> [<PROCESSNAME> | <PROCESSID>]\r\n\r\n"
-        "  0: low\n"
+        "  0: low\r\n"
         "  1: belownormal\r\n"
         "  2: normal\r\n"
         "  3: abovenormal\r\n"
@@ -152,6 +175,8 @@ int main(void) {
   DWORD err;
   wchar_t *s;
   DWORD pid = 0;
+  wchar_t procbuf[64];
+  wchar_t* procname = L"";
 
   argv = CommandLineToArgvW(GetCommandLineW(), &argc);
   if (!argv) {
@@ -205,7 +230,13 @@ int main(void) {
               (*(s+8) == L'M' || *(s+8) == L'm') &&
               (*(s+9) == L'A' || *(s+9) == L'a') &&
               (*(s+10) == L'L' || *(s+10) == L'l') &&
-              (*(s+11) == L'\0' || *(s+11) == L' ' || *(s+11) == L'\t' || *(s+11) == L'/' || *(s+11) == L'-' || *(s+11) == L'\r' || *(s+11) == L'\n'))) {
+              (*(s+11) == L'\0' || *(s+11) == L' ' || *(s+11) == L'\t' || *(s+11) == L'/' || *(s+11) == L'-' || *(s+11) == L'\r' || *(s+11) == L'\n')) ||
+             ((*s == L'L' || *s == L'l') &&
+              (*(s+1) == L'O' || *(s+1) == L'o') &&
+              (*(s+2) == L'W' || *(s+2) == L'w') &&
+              (*(s+3) == L'E' || *(s+3) == L'e') &&
+              (*(s+4) == L'R' || *(s+4) == L'r') &&
+              (*(s+5) == L'\0' || *(s+5) == L' ' || *(s+5) == L'\t' || *(s+5) == L'/' || *(s+5) == L'-' || *(s+5) == L'\r' || *(s+5) == L'\n'))) {
     prio = BELOW_NORMAL_PRIORITY_CLASS;
   } else if (((*s == L'2') &&
               (*(s+1) == L'\0' || *(s+1) == L' ' || *(s+1) == L'\t' || *(s+1) == L'/' || *(s+1) == L'-' || *(s+1) == L'\r' || *(s+1) == L'\n')) ||
@@ -230,7 +261,14 @@ int main(void) {
               (*(s+8) == L'M' || *(s+8) == L'm') &&
               (*(s+9) == L'A' || *(s+9) == L'a') &&
               (*(s+10) == L'L' || *(s+10) == L'l') &&
-              (*(s+11) == L'\0' || *(s+11) == L' ' || *(s+11) == L'\t' || *(s+11) == L'/' || *(s+11) == L'-' || *(s+11) == L'\r' || *(s+11) == L'\n'))) {
+              (*(s+11) == L'\0' || *(s+11) == L' ' || *(s+11) == L'\t' || *(s+11) == L'/' || *(s+11) == L'-' || *(s+11) == L'\r' || *(s+11) == L'\n')) ||
+             ((*s == L'H' || *s == L'h') &&
+              (*(s+1) == L'I' || *(s+1) == L'i') &&
+              (*(s+2) == L'G' || *(s+2) == L'g') &&
+              (*(s+3) == L'H' || *(s+3) == L'h') &&
+              (*(s+4) == L'E' || *(s+4) == L'e') &&
+              (*(s+5) == L'R' || *(s+5) == L'r') &&
+              (*(s+6) == L'\0' || *(s+6) == L' ' || *(s+6) == L'\t' || *(s+6) == L'/' || *(s+6) == L'-' || *(s+6) == L'\r' || *(s+6) == L'\n'))) {
     prio = ABOVE_NORMAL_PRIORITY_CLASS;
   } else if (((*s == L'4') &&
               (*(s+1) == L'\0' || *(s+1) == L' ' || *(s+1) == L'\t' || *(s+1) == L'/' || *(s+1) == L'-' || *(s+1) == L'\r' || *(s+1) == L'\n')) ||
@@ -267,16 +305,18 @@ int main(void) {
       pid = pid * 10 + s[i] - 48;
     }
     if (pid) {
-      if (!PIDIsProcess(pid)) {
+      if (!GetNameForProcessW(pid, procbuf)) {
         fmt_error("prio: could not find process with pid: %1!u!\r\n", (DWORD_PTR)pid, (DWORD_PTR)"");
         ExitProcess(-2);
       }
+      procname = procbuf;
     } else {
       pid = GetPIDForProcessW(s);
       if (!pid) {
         fmt_error("prio: could not find process with name: '%1!.*ws!'\r\n", (DWORD_PTR)__wcslen(s), (DWORD_PTR)s);
         ExitProcess(-3);
       }
+      procname = s;
     }
   } else {
     pid = GetParentProcessId();
@@ -284,6 +324,9 @@ int main(void) {
       err = GetLastError();
       fmt_error("prio: (!) ntdll:NtQueryInformationProcess() failed; error code = 0x%1!08X!\r\n", (DWORD_PTR)err, (DWORD_PTR)"");
       ExitProcess(-4);
+    }
+    if (GetNameForProcessW(pid, procbuf)) {
+      procname = procbuf;
     }
   }
 
@@ -300,5 +343,26 @@ int main(void) {
     ExitProcess(-6);
   }
   CloseHandle(pproc);
+  fmt_print("prio: set priority of '%1!.*ws!' to ", (DWORD_PTR)__wcslen(procname), (DWORD_PTR)procname);
+  switch(prio) {
+    case IDLE_PRIORITY_CLASS:
+      print("LOW\r\n");
+      break;
+    case BELOW_NORMAL_PRIORITY_CLASS:
+      print("BELOW NORMAL\r\n");
+      break;
+    case NORMAL_PRIORITY_CLASS:
+      print("NORMAL\r\n");
+      break;
+    case ABOVE_NORMAL_PRIORITY_CLASS:
+      print("ABOVE NORMAL\r\n");
+      break;
+    case HIGH_PRIORITY_CLASS:
+      print("HIGH\r\n");
+      break;
+    case REALTIME_PRIORITY_CLASS:
+      print("REALTIME\r\n");
+      break;
+  }
   ExitProcess(0);
 }
